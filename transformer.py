@@ -68,7 +68,7 @@ class Attention(nn.Module):
         return self.to_out(out)
 
 class attn_block(nn.Module):
-    def __init__(self, dim=1024, heads=8, dim_head=64, mlp_dim=1024, dropout = 0.):
+    def __init__(self, dim=512, heads=8, dim_head=64, mlp_dim=512, dropout = 0.):
         super().__init__()
         self.attn=PreNorm(dim, Attention(dim, heads = heads, dim_head = dim_head, dropout = dropout))
         self.ff=PreNorm(dim, FeedForward(dim, mlp_dim, dropout = dropout))
