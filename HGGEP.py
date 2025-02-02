@@ -34,7 +34,7 @@ class Conv2d_Hori_Veri_Cross(nn.Module):
     def forward(self, x):
 
         [C_out, C_in, H_k, W_k] = self.conv.weight.shape
-        tensor_zeros = torch.FloatTensor(C_out, C_in, 1).fill_(0).cuda()
+        tensor_zeros = torch.FloatTensor(C_out, C_in, 1).fill_(0).cuda().half()
         conv_weight = torch.cat((tensor_zeros, self.conv.weight[:, :, :, 0], tensor_zeros, self.conv.weight[:, :, :, 1],
                                 self.conv.weight[:, :, :, 2], self.conv.weight[:, :, :, 3], tensor_zeros, self.conv.weight[:, :, :, 4], tensor_zeros), 2)
         conv_weight = conv_weight.contiguous().view(C_out, C_in, 3, 3)
@@ -160,8 +160,8 @@ class HGGEP(pl.LightningModule):
         self.layer5 = shufflenet_v2.conv5
         
         self.down4 = nn.Sequential(CBAM(192), nn.BatchNorm2d(192), nn.Conv2d(192, 64, 1, 1), nn.Flatten())
-        self.down5 = nn.Sequential(CBAM(dim), nn.BatchNorm2d(dim), nn.Conv2d(dim, 64, 1, 1), nn.Flatten())
-        self.down6 = nn.Sequential(CBAM(dim), nn.BatchNorm2d(dim), nn.Conv2d(dim, dim, 1, 1), nn.Flatten())
+        self.down5 = nn.Sequential(CBAM(dim*2), nn.BatchNorm2d(dim*2), nn.Conv2d(dim*2, 64, 1, 1), nn.Flatten())
+        self.down6 = nn.Sequential(CBAM(dim*2), nn.BatchNorm2d(dim*2), nn.Conv2d(dim, dim, 1, 1), nn.Flatten())
         
         # ViT Encoder
         self.ViT1 = nn.Sequential(*[attn_block(dim, 16, 64, dim, dropout) for i in range(4)])
@@ -202,29 +202,30 @@ class HGGEP(pl.LightningModule):
  
         patches = self.conv0(patches)
         h3 = self.layer3(self.layer2(self.layer1(patches)))
-        # print("h3:",h3.shape)                 # [295, 96, 8, 8]
+        print("h3:",h3.shape)                 # [295, 96, 8, 8]
         h4_tmp = self.layer4(h3)
-        # print(h4_tmp.shape)                   # [295, 192, 4, 4]
+        print(h4_tmp.shape)                   # [295, 192, 4, 4]
         h4 = self.down4(h4_tmp)
-        # print(h4.shape)                     
+        print(h4.shape)                     
         h5_tmp = self.layer5(h4_tmp)
-        # print(h5_tmp.shape)                   # [295, 1024, 4, 4]
+        print("h5 temp", h5_tmp.shape)                   # [295, 1024, 4, 4]
         h5 = self.down5(h5_tmp)
-        # print(h5.shape)                       # [295, 512]
+        print("h5:", h5.shape)                       # [295, 512]
         h6 = self.down6(F.adaptive_max_pool2d(h5_tmp, (1, 1)))
-        # print(h6.shape)                       #  [295, 1568]
+        print(h6.shape)                       #  [295, 1568]
 
         # print(patches.shape)  # ([n, 512, 3, 3])
         centers_x = self.x_embed(centers[:, :, 0]) 
         centers_y = self.y_embed(centers[:, :, 1])
         ct = centers_x + centers_y
+        print(ct.shape)
         h4 = self.ViT1(h4.unsqueeze(0)+ct).squeeze(0)
         h5 = self.ViT2(h5.unsqueeze(0)+ct).squeeze(0)
         h6 = self.ViT3(h6.unsqueeze(0)+ct).squeeze(0)
         # print(h6[0][:20])
 
         # HGNN
-        HGNN_data = build_adj_hypergraph(h4+h5+h6, adj, 3).cuda()
+        HGNN_data = build_adj_hypergraph(h4+h5+h6, adj, 3).cuda().half()
         hgnn = self.hgnn(HGNN_data)
         jk = [h4.unsqueeze(0), h5.unsqueeze(0), h6.unsqueeze(0), hgnn.unsqueeze(0)]
         g = torch.cat(jk, 0)
